@@ -55,14 +55,91 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const initialRefreshId = window.setTimeout(() => void refresh(), 0)
     const intervalId = window.setInterval(() => void refresh(), 8000)
+
     return () => {
       window.clearTimeout(initialRefreshId)
       window.clearInterval(intervalId)
     }
   }, [refresh])
 
+  /**
+   * Keyboard shortcuts
+   *
+   * R     -> Refresh modules
+   * D     -> Toggle dark/light mode
+   * 1     -> All modules
+   * 2     -> Critical modules
+   * 3     -> Drifting modules
+   * 4     -> Stable modules
+   * Esc   -> Close the heal/diff modal
+   */
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null
+
+      // Don't hijack shortcuts while typing in forms/inputs.
+      const isTyping =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT' ||
+        target?.isContentEditable
+
+      if (isTyping) {
+        return
+      }
+
+      // Don't trigger shortcuts when modifier keys are being used.
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return
+      }
+
+      switch (event.key.toLowerCase()) {
+        case 'r':
+          event.preventDefault()
+          void refresh()
+          break
+
+        case 'd':
+          event.preventDefault()
+          toggleTheme()
+          break
+
+        case '1':
+          event.preventDefault()
+          setFilter('ALL')
+          break
+
+        case '2':
+          event.preventDefault()
+          setFilter('HIGH')
+          break
+
+        case '3':
+          event.preventDefault()
+          setFilter('MEDIUM')
+          break
+
+        case '4':
+          event.preventDefault()
+          setFilter('LOW')
+          break
+
+        case 'escape':
+          setHealResult(null)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [refresh, toggleTheme])
+
   async function handleSimulate(id: string): Promise<void> {
     setBusyId(id)
+
     try {
       await api.simulate(id, 5)
       await refresh()
@@ -77,6 +154,7 @@ export default function App(): JSX.Element {
 
   async function handleHeal(id: string): Promise<void> {
     setBusyId(id)
+
     try {
       const result: DiffResult = await api.healNow(id)
       setHealResult(result)
@@ -95,15 +173,24 @@ export default function App(): JSX.Element {
     const critical = modules.filter((m) => m.heatLevel === 'HIGH').length
     const drifting = modules.filter((m) => m.heatLevel === 'MEDIUM').length
     const stable = modules.filter((m) => m.heatLevel === 'LOW').length
+
     const pending = modules.reduce(
       (sum, m) => sum + m.unprocessedSummaries,
       0,
     )
-    return { total, critical, drifting, stable, pending }
+
+    return {
+      total,
+      critical,
+      drifting,
+      stable,
+      pending,
+    }
   }, [modules])
 
   const filtered = useMemo(() => {
     if (filter === 'ALL') return modules
+
     return modules.filter((m) => m.heatLevel === filter)
   }, [modules, filter])
 
@@ -112,7 +199,10 @@ export default function App(): JSX.Element {
       <BlueprintBackdrop />
 
       <div className="relative z-10 mx-auto w-full max-w-[1400px] px-5 sm:px-8">
-        <TopBar theme={theme} onToggleTheme={toggleTheme} />
+        <TopBar
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
 
         <Hero
           lastSync={lastSync}
@@ -139,11 +229,15 @@ export default function App(): JSX.Element {
               className="mb-6 border border-[color:var(--color-bad)]/30 bg-[color:var(--color-bad)]/5 px-4 py-3 text-sm"
             >
               <div className="flex items-start gap-3 font-mono">
-                <span className="mt-0.5 text-[color:var(--color-bad)]">✕</span>
+                <span className="mt-0.5 text-[color:var(--color-bad)]">
+                  ✕
+                </span>
+
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-widest text-[color:var(--color-bad)]">
                     Backend unreachable
                   </div>
+
                   <div className="mt-1 text-[color:var(--color-ink-3)]">
                     {error}
                   </div>
@@ -167,7 +261,10 @@ export default function App(): JSX.Element {
             ) : modules.length === 0 ? (
               <EmptyState key="empty" />
             ) : filtered.length === 0 ? (
-              <NoResultsState key="no-results" onReset={() => setFilter('ALL')} />
+              <NoResultsState
+                key="no-results"
+                onReset={() => setFilter('ALL')}
+              />
             ) : (
               <motion.div
                 key={`heatmap-${filter}`}
@@ -202,12 +299,13 @@ export default function App(): JSX.Element {
   )
 }
 
-/* ---------- Sub-components (kept inline for cohesion) ---------- */
+/* ---------- Sub-components ---------- */
 
 function BlueprintBackdrop(): JSX.Element {
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       <div className="absolute inset-0 bg-blueprint opacity-[0.35] dark:opacity-[0.25]" />
+
       <div
         className="absolute inset-0"
         style={{
@@ -232,10 +330,12 @@ function TopBar({
         <div className="grid h-8 w-8 place-items-center border border-[color:var(--color-line-strong)] bg-[color:var(--color-surface)] font-mono text-sm font-bold">
           §
         </div>
+
         <div className="flex flex-col leading-tight">
           <span className="font-mono text-[11px] font-semibold tracking-widest text-[color:var(--color-ink-2)]">
             DOC·DEBT
           </span>
+
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--color-muted)]">
             tracker / v0.1.0
           </span>
@@ -249,12 +349,20 @@ function TopBar({
           rel="noreferrer"
           className="hidden items-center gap-2 border border-transparent px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-[color:var(--color-ink-3)] transition hover:border-[color:var(--color-line-strong)] hover:text-[color:var(--color-ink)] sm:inline-flex"
         >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+          <svg
+            className="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
             <path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2.2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.2-1.7-1.2-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2 1-.3 2-.4 3-.4s2 .1 3 .4c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6C20.2 21.4 23.5 17.1 23.5 12 23.5 5.6 18.4.5 12 .5z" />
           </svg>
           Source
         </a>
-        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+        <ThemeToggle
+          theme={theme}
+          onToggle={onToggleTheme}
+        />
       </nav>
     </div>
   )
@@ -268,6 +376,7 @@ function ThemeToggle({
   onToggle: () => void
 }): JSX.Element {
   const isDark = theme === 'dark'
+
   return (
     <button
       type="button"
@@ -277,17 +386,33 @@ function ThemeToggle({
     >
       <motion.span
         layout
-        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-        className={`absolute top-0.5 h-6 w-7 bg-[color:var(--color-ink)] ${isDark ? 'right-0.5' : 'left-0.5'}`}
+        transition={{
+          type: 'spring',
+          stiffness: 500,
+          damping: 30,
+        }}
+        className={`absolute top-0.5 h-6 w-7 bg-[color:var(--color-ink)] ${
+          isDark ? 'right-0.5' : 'left-0.5'
+        }`}
       />
+
       <span className="relative z-10 flex w-full items-center justify-between px-1.5 font-mono text-[10px] font-bold tracking-widest">
         <span
-          className={isDark ? 'text-[color:var(--color-muted)]' : 'text-[color:var(--color-canvas)]'}
+          className={
+            isDark
+              ? 'text-[color:var(--color-muted)]'
+              : 'text-[color:var(--color-canvas)]'
+          }
         >
           LT
         </span>
+
         <span
-          className={isDark ? 'text-[color:var(--color-canvas)]' : 'text-[color:var(--color-muted)]'}
+          className={
+            isDark
+              ? 'text-[color:var(--color-canvas)]'
+              : 'text-[color:var(--color-muted)]'
+          }
         >
           DK
         </span>
@@ -309,8 +434,12 @@ function Hero({
     <section className="grid grid-cols-1 gap-8 py-10 md:py-14 lg:grid-cols-12 lg:gap-10">
       <div className="lg:col-span-8">
         <div className="mb-4 flex items-center gap-3">
-          <span className="eyebrow">Issue №{String(totalModules).padStart(3, '0')}</span>
+          <span className="eyebrow">
+            Issue №{String(totalModules).padStart(3, '0')}
+          </span>
+
           <span className="h-px flex-1 bg-[color:var(--color-line)]" />
+
           <span className="eyebrow">
             {new Date().toLocaleDateString('en-US', {
               year: 'numeric',
@@ -354,8 +483,10 @@ function Hero({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[color:var(--color-good)] opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[color:var(--color-good)]" />
             </span>
+
             <div className="font-mono text-[11px] uppercase tracking-widest text-[color:var(--color-muted)]">
               Live · syncing every 8s
+
               {lastSync && (
                 <span className="ml-2 text-[color:var(--color-ink-3)]">
                   {lastSync.toLocaleTimeString([], {
@@ -367,6 +498,7 @@ function Hero({
               )}
             </div>
           </div>
+
           <NewModuleForm onCreated={onCreated} />
         </div>
       </div>
@@ -393,10 +525,25 @@ function StatsStrip({
     accent?: string
   }[] = [
     { label: 'Modules', value: total },
-    { label: 'Critical', value: critical, accent: 'var(--color-bad)' },
-    { label: 'Drifting', value: drifting, accent: 'var(--color-warn)' },
-    { label: 'Stable', value: stable, accent: 'var(--color-good)' },
-    { label: 'Pending PRs', value: pending },
+    {
+      label: 'Critical',
+      value: critical,
+      accent: 'var(--color-bad)',
+    },
+    {
+      label: 'Drifting',
+      value: drifting,
+      accent: 'var(--color-warn)',
+    },
+    {
+      label: 'Stable',
+      value: stable,
+      accent: 'var(--color-good)',
+    },
+    {
+      label: 'Pending PRs',
+      value: pending,
+    },
   ]
 
   return (
@@ -404,30 +551,39 @@ function StatsStrip({
       <div className="absolute -top-2 left-4 bg-[color:var(--color-canvas)] px-2">
         <span className="eyebrow">Overview</span>
       </div>
+
       <div className="grid grid-cols-2 divide-x divide-y divide-[color:var(--color-line)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5">
         {cells.map((cell, i) => (
           <motion.div
             key={cell.label}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 * i, duration: 0.35 }}
+            transition={{
+              delay: 0.05 * i,
+              duration: 0.35,
+            }}
             className="relative px-5 py-5"
           >
             <div className="flex items-baseline justify-between">
               <span className="eyebrow">{cell.label}</span>
-              <span
-                className="font-mono text-[10px] tabular text-[color:var(--color-faint)]"
-              >
+
+              <span className="font-mono text-[10px] tabular text-[color:var(--color-faint)]">
                 {String(i + 1).padStart(2, '0')}
               </span>
             </div>
+
             <div className="mt-3 flex items-baseline gap-2">
               <span
                 className="display tabular text-5xl"
-                style={cell.accent ? { color: cell.accent } : undefined}
+                style={
+                  cell.accent
+                    ? { color: cell.accent }
+                    : undefined
+                }
               >
                 {String(cell.value).padStart(2, '0')}
               </span>
+
               {cell.accent && cell.value > 0 && (
                 <span
                   className="h-1.5 w-1.5 rounded-full"
@@ -457,9 +613,11 @@ function Toolbar({
     <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[color:var(--color-line)] pb-4">
       <div className="flex items-center gap-2">
         <span className="eyebrow">Filter</span>
+
         <div className="flex flex-wrap gap-1 border border-[color:var(--color-line-strong)] bg-[color:var(--color-surface)] p-0.5">
           {FILTERS.map((f) => {
             const active = filter === f.key
+
             return (
               <button
                 key={f.key}
@@ -475,10 +633,17 @@ function Toolbar({
                   <motion.span
                     layoutId="filter-pill"
                     className="absolute inset-0 bg-[color:var(--color-ink)]"
-                    transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                    transition={{
+                      type: 'spring',
+                      stiffness: 500,
+                      damping: 32,
+                    }}
                   />
                 )}
-                <span className="relative">{f.label}</span>
+
+                <span className="relative">
+                  {f.label}
+                </span>
               </button>
             )
           })}
@@ -489,8 +654,13 @@ function Toolbar({
         <span className="tabular text-[color:var(--color-ink)]">
           {String(visibleCount).padStart(2, '0')}
         </span>
+
         <span>/</span>
-        <span className="tabular">{String(totalCount).padStart(2, '0')}</span>
+
+        <span className="tabular">
+          {String(totalCount).padStart(2, '0')}
+        </span>
+
         <span>shown</span>
       </div>
     </div>
@@ -511,16 +681,21 @@ function LoadingState(): JSX.Element {
           className="relative h-64 border border-[color:var(--color-line)] bg-[color:var(--color-surface)]"
         >
           <div className="absolute inset-0 bg-stripes opacity-40" />
+
           <motion.div
             className="absolute inset-x-0 top-1/2 h-px bg-[color:var(--color-line-strong)]"
-            animate={{ scaleX: [0, 1, 0] }}
+            animate={{
+              scaleX: [0, 1, 0],
+            }}
             transition={{
               duration: 1.6,
               delay: i * 0.1,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
-            style={{ transformOrigin: 'left' }}
+            style={{
+              transformOrigin: 'left',
+            }}
           />
         </div>
       ))}
@@ -539,7 +714,11 @@ function EmptyState(): JSX.Element {
       <div className="mx-auto mb-6 grid h-14 w-14 place-items-center border border-[color:var(--color-line-strong)] font-mono text-xl font-bold text-[color:var(--color-ink-3)]">
         ∅
       </div>
-      <h3 className="display text-4xl">No modules yet.</h3>
+
+      <h3 className="display text-4xl">
+        No modules yet.
+      </h3>
+
       <p className="mt-3 text-sm text-[color:var(--color-ink-3)]">
         Track your first module above — or wait for the first PR merge webhook
         to land.
@@ -548,7 +727,11 @@ function EmptyState(): JSX.Element {
   )
 }
 
-function NoResultsState({ onReset }: { onReset: () => void }): JSX.Element {
+function NoResultsState({
+  onReset,
+}: {
+  onReset: () => void
+}): JSX.Element {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -556,10 +739,14 @@ function NoResultsState({ onReset }: { onReset: () => void }): JSX.Element {
       exit={{ opacity: 0 }}
       className="mx-auto max-w-lg border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-6 py-12 text-center"
     >
-      <div className="eyebrow">No matches</div>
+      <div className="eyebrow">
+        No matches
+      </div>
+
       <p className="mt-3 text-base text-[color:var(--color-ink-2)]">
         No modules match the current filter.
       </p>
+
       <button
         type="button"
         onClick={onReset}
@@ -575,13 +762,38 @@ function Footer(): JSX.Element {
   return (
     <footer className="border-t border-[color:var(--color-line)] py-6">
       <div className="flex flex-col items-start justify-between gap-3 font-mono text-[11px] uppercase tracking-widest text-[color:var(--color-muted)] sm:flex-row sm:items-center">
-        <div>Doc·Debt Tracker — Map·Reduce healing pipeline</div>
+        <div>
+          Doc·Debt Tracker — Map·Reduce healing pipeline
+        </div>
+
         <div className="flex items-center gap-4">
-          <span>API · localhost:8080</span>
-          <span className="hidden sm:inline">·</span>
-          <span>Made with rigor</span>
+          <span>
+            API · localhost:8080
+          </span>
+
+          <span className="hidden sm:inline">
+            ·
+          </span>
+
+          <span>
+            Made with rigor
+          </span>
         </div>
       </div>
     </footer>
   )
 }
+
+Shortcuts now supported
+Key	Action
+R	Refresh modules
+D	Toggle light/dark mode
+1	All
+2	Critical
+3	Drifting
+4	Stable
+Esc	Close Diff/Heal modal
+
+The important part is the new useEffect in App(). It also deliberately ignores shortcuts when the user is typing in an input, textarea, select, or content-editable element, so the shortcuts won't break NewModuleForm.
+
+One thing I would add next is a small “Keyboard shortcuts · ?” overlay in the UI so users can discover these without knowing the shortcuts.
